@@ -70,6 +70,9 @@ func (b Bottlerocket) Script() (string, error) {
 		if b.KubeletConfig.ImageGCLowThresholdPercent != nil {
 			s.Settings.Kubernetes.ImageGCLowThresholdPercent = lo.ToPtr(strconv.FormatInt(int64(*b.KubeletConfig.ImageGCLowThresholdPercent), 10))
 		}
+		if b.KubeletConfig.PodsPerCore != nil {
+			return "", fmt.Errorf("invalid kubelet config: Bottlerocket AMIFamily currently does not support podsPerCore configuration")
+		}
 	}
 
 	s.Settings.Kubernetes.NodeTaints = map[string][]string{}
