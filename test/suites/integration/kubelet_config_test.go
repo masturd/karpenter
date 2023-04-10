@@ -110,7 +110,6 @@ var _ = Describe("KubeletConfiguration Overrides", func() {
 			Kubelet: &v1alpha5.KubeletConfiguration{
 				ContainerRuntime: ptr.String("containerd"),
 				MaxPods:          ptr.Int32(110),
-				PodsPerCore:      ptr.Int32(10),
 				SystemReserved: v1.ResourceList{
 					v1.ResourceCPU:              resource.MustParse("200m"),
 					v1.ResourceMemory:           resource.MustParse("200Mi"),
@@ -156,6 +155,64 @@ var _ = Describe("KubeletConfiguration Overrides", func() {
 		env.ExpectCreated(provisioner, provider, pod)
 		env.EventuallyExpectHealthy(pod)
 		env.ExpectCreatedNodeCount("==", 1)
+	})
+	It("should fail to startup when podsPerCore kubelet configuration set (Bottlerocket)", func() {
+		provider := awstest.AWSNodeTemplate(v1alpha1.AWSNodeTemplateSpec{AWS: v1alpha1.AWS{
+			AMIFamily:             &v1alpha1.AMIFamilyBottlerocket,
+			SecurityGroupSelector: map[string]string{"karpenter.sh/discovery": settings.FromContext(env.Context).ClusterName},
+			SubnetSelector:        map[string]string{"karpenter.sh/discovery": settings.FromContext(env.Context).ClusterName},
+		}})
+
+		// MaxPods needs to account for the daemonsets that will run on the nodes
+		provisioner := test.Provisioner(test.ProvisionerOptions{
+			ProviderRef: &v1alpha5.MachineTemplateRef{Name: provider.Name},
+			Kubelet: &v1alpha5.KubeletConfiguration{
+				ContainerRuntime: ptr.String("containerd"),
+				MaxPods:          ptr.Int32(110),
+				PodsPerCore:      ptr.Int32(1),
+				SystemReserved: v1.ResourceList{
+					v1.ResourceCPU:              resource.MustParse("200m"),
+					v1.ResourceMemory:           resource.MustParse("200Mi"),
+					v1.ResourceEphemeralStorage: resource.MustParse("1Gi"),
+				},
+				KubeReserved: v1.ResourceList{
+					v1.ResourceCPU:              resource.MustParse("200m"),
+					v1.ResourceMemory:           resource.MustParse("200Mi"),
+					v1.ResourceEphemeralStorage: resource.MustParse("1Gi"),
+				},
+				EvictionHard: map[string]string{
+					"memory.available":   "5%",
+					"nodefs.available":   "5%",
+					"nodefs.inodesFree":  "5%",
+					"imagefs.available":  "5%",
+					"imagefs.inodesFree": "5%",
+					"pid.available":      "3%",
+				},
+				EvictionSoft: map[string]string{
+					"memory.available":   "10%",
+					"nodefs.available":   "10%",
+					"nodefs.inodesFree":  "10%",
+					"imagefs.available":  "10%",
+					"imagefs.inodesFree": "10%",
+					"pid.available":      "6%",
+				},
+				EvictionSoftGracePeriod: map[string]metav1.Duration{
+					"memory.available":   {Duration: time.Minute * 2},
+					"nodefs.available":   {Duration: time.Minute * 2},
+					"nodefs.inodesFree":  {Duration: time.Minute * 2},
+					"imagefs.available":  {Duration: time.Minute * 2},
+					"imagefs.inodesFree": {Duration: time.Minute * 2},
+					"pid.available":      {Duration: time.Minute * 2},
+				},
+				EvictionMaxPodGracePeriod:   ptr.Int32(120),
+				ImageGCHighThresholdPercent: ptr.Int32(50),
+				ImageGCLowThresholdPercent:  ptr.Int32(10),
+				CPUCFSQuota:                 ptr.Bool(false),
+			},
+		})
+
+		pod := test.Pod()
+		env.ExpectCreateFailed(provisioner, provider, pod)
 	})
 	It("should schedule pods onto separate nodes when maxPods is set", func() {
 		provider := awstest.AWSNodeTemplate(v1alpha1.AWSNodeTemplateSpec{AWS: v1alpha1.AWS{
@@ -254,7 +311,7 @@ var _ = Describe("KubeletConfiguration Overrides", func() {
 		env.ExpectCreatedNodeCount("==", 2)
 		env.ExpectUniqueNodeNames(selector, 2)
 	})
-	It("should ignore podsPerCore value when Bottlerocket is used", func() {
+	It("should fail podsPerCore value when Bottlerocket is used", func() {
 		provider := awstest.AWSNodeTemplate(v1alpha1.AWSNodeTemplateSpec{AWS: v1alpha1.AWS{
 			SecurityGroupSelector: map[string]string{"karpenter.sh/discovery": settings.FromContext(env.Context).ClusterName},
 			SubnetSelector:        map[string]string{"karpenter.sh/discovery": settings.FromContext(env.Context).ClusterName},

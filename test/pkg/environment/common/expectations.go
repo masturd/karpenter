@@ -41,6 +41,19 @@ import (
 	"github.com/aws/karpenter-core/pkg/test"
 )
 
+func (env *Environment) ExpectCreateFailedWithOffset(offset int, objects ...client.Object) {
+	for _, object := range objects {
+		object.SetLabels(lo.Assign(object.GetLabels(), map[string]string{
+			test.DiscoveryLabel: "unspecified",
+		}))
+		ExpectWithOffset(offset+1, env.Client.Create(env, object)).NotTo(Succeed())
+	}
+}
+
+func (env *Environment) ExpectCreateFailed(objects ...client.Object) {
+	env.ExpectCreateFailedWithOffset(1, objects...)
+}
+
 func (env *Environment) ExpectCreatedWithOffset(offset int, objects ...client.Object) {
 	for _, object := range objects {
 		object.SetLabels(lo.Assign(object.GetLabels(), map[string]string{
